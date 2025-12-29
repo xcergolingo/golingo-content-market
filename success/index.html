@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Payment Successful</title>
+  <style>
+    :root { --primary:#6366f1; --dark:#111827; --light:#f9fafb; --gray:#6b7280; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: system-ui, sans-serif; background: var(--light); color: var(--dark); }
+    .wrap { min-height: 100vh; display:flex; align-items:center; justify-content:center; padding: 2rem; }
+    .card { width: 100%; max-width: 680px; background: white; border-radius: 14px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); padding: 2rem; }
+    h1 { font-size: 2rem; margin-bottom: 0.75rem; }
+    p { color: var(--gray); line-height: 1.6; margin-bottom: 1rem; }
+    .meta { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 0.95rem; color: #374151; background: #f3f4f6; border-radius: 10px; padding: 0.75rem 1rem; overflow:auto; }
+    .actions { display:flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1.25rem; }
+    a.btn { display:inline-block; padding: 0.75rem 1rem; border-radius: 10px; text-decoration:none; font-weight: 700; }
+    a.primary { background: var(--primary); color: white; }
+    a.ghost { background: #eef2ff; color: #3730a3; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Payment successful</h1>
+      <p>Thanks — your payment went through. You can head back to the catalog.</p>
+      <div class="meta" id="details">session_id: (not provided)</div>
+      <div class="actions">
+        <a class="btn primary" href="/">Back to Video Vault</a>
+        <a class="btn ghost" href="/cancel">Having trouble?</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("session_id");
+    if (sessionId) {
+      document.getElementById("details").textContent = `session_id: ${sessionId}`;
+    }
+  </script>
+</body>
+</html>
+

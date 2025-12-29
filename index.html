@@ -105,6 +105,12 @@
 
     /* Cart Modal */
     #cart-modal .modal-content { max-width: 500px; }
+    #cart-items { padding: 1rem 1.5rem 0; }
+    .cart-item { display:flex; justify-content:space-between; gap:1rem; padding:0.75rem 0; border-bottom: 1px solid #f3f4f6; }
+    .empty-cart { padding: 1rem 1.5rem; color: var(--gray); }
+    .cart-total { padding: 1rem 1.5rem; font-weight: 700; display:flex; justify-content: space-between; }
+    .btn[disabled] { opacity: 0.6; cursor: not-allowed; }
+    .checkout-note { padding: 0 1.5rem 1.25rem; font-size: 0.9rem; color: var(--gray); }
 
     @media (max-width: 600px) {
       .products-grid { grid-template-columns: 1fr; }
@@ -174,11 +180,16 @@
       <div class="cart-total">
         Total: <span id="cart-total">$0.00</span>
       </div>
-      <button class="btn" style="width:100%; margin-top:1.5rem;" onclick="alert('Checkout coming soon!')">Proceed to Checkout</button>
+      <button class="btn" id="checkout-btn" style="width:100%; margin: 0 1.5rem 0.75rem;" onclick="startCheckout()">
+        Proceed to Checkout
+      </button>
+      <div class="checkout-note">You’ll be redirected to Stripe to complete payment.</div>
     </div>
   </div>
 
   <script>
+    const STRIPE_CHECKOUT_ENDPOINT = "https://gzob52iqr5.execute-api.us-east-1.amazonaws.com/prod/stripe";
+
     // Sample products (replace with your database)
     const videos = [
       {
@@ -298,6 +309,57 @@
 
     function closeCart() {
       document.getElementById("cart-modal").style.display = "none";
+    }
+
+    async function startCheckout() {
+      if (cart.length === 0) {
+        alert("Your cart is empty.");
+        return;
+      }
+
+      const checkoutBtn = document.getElementById("checkout-btn");
+      checkoutBtn.disabled = true;
+      const previousText = checkoutBtn.textContent;
+      checkoutBtn.textContent = "Redirecting to Stripe…";
+
+      try {
+        const res = await fetch(STRIPE_CHECKOUT_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: cart.map(item => ({ id: item.id, title: item.title, price: item.price })),
+            return_url_base: window.location.origin
+          })
+        });
+
+        if (!res.ok) {
+          throw new Error(`Stripe session request failed (${res.status})`);
+        }
+
+        const data = await res.json();
+        if (typeof data?.statusCode === "number" && data.statusCode >= 400) {
+          throw new Error(`Stripe session request failed (${data.statusCode})`);
+        }
+
+        let payload = data;
+        if (typeof data?.body === "string") {
+          try { payload = JSON.parse(data.body); } catch { payload = {}; }
+        } else if (data?.body && typeof data.body === "object") {
+          payload = data.body;
+        }
+
+        const url = payload?.url ?? data?.url;
+        if (!url) {
+          throw new Error("Stripe session response missing `url`.");
+        }
+
+        window.location.assign(url);
+      } catch (err) {
+        console.error(err);
+        alert("Payment failed. Check console.");
+        checkoutBtn.disabled = false;
+        checkoutBtn.textContent = previousText;
+      }
     }
 
     // Initialize
