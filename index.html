@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Video Vault – Premium Video Content</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  <style>
+    :root {
+      --primary: #6366f1;       /* Indigo */
+      --primary-dark: #4f46e5;
+      --dark: #111827;
+      --light: #f9fafb;
+      --gray: #6b7280;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background-color: var(--light);
+      color: var(--dark);
+      line-height: 1.6;
+    }
+
+    header {
+      background-color: white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    nav {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 1rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-size: 1.75rem;
+      font-weight: 800;
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .logo img {
+      height: 48px;
+      width: auto;
+    }
+
+    .cart-icon {
+      position: relative;
+      cursor: pointer;
+      font-size: 1.5rem;
+      color: var(--dark);
+    }
+
+    .cart-count {
+      position: absolute;
+      top: -8px;
+      right: -12px;
+      background: var(--primary);
+      color: white;
+      font-size: 0.75rem;
+      font-weight: bold;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    main {
+      max-width: 1400px;
+      margin: 3rem auto;
+      padding: 0 1.5rem;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 2.5rem;
+      font-size: 2.5rem;
+      color: var(--dark);
+    }
+
+    .products-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 2rem;
+    }
+
+    .product-card {
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .product-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+    }
+
+    .product-thumbnail {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+      background: #e5e7eb;
+    }
+
+    .product-info {
+      padding: 1.25rem;
+    }
+
+    .product-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .product-desc {
+      color: var(--gray);
+      font-size: 0.95rem;
+      margin-bottom: 1rem;
+      line-height: 1.5;
+    }
+
+    .product-price {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--primary-dark);
+      margin-bottom: 1rem;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 0.75rem 1.5rem;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      text-decoration: none;
+    }
+
+    .btn:hover {
+      background: var(--primary-dark);
+    }
+
+    .btn-add {
+      width: 100%;
+      text-align: center;
+    }
+
+    /* Cart Modal */
+    #cart-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal-content {
+      background: white;
+      width: 90%;
+      max-width: 500px;
+      border-radius: 12px;
+      padding: 2rem;
+      position: relative;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      font-size: 1.75rem;
+      cursor: pointer;
+      color: var(--gray);
+    }
+
+    .cart-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 1rem 0;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .cart-total {
+      margin-top: 1.5rem;
+      font-size: 1.25rem;
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .empty-cart {
+      text-align: center;
+      color: var(--gray);
+      padding: 2rem 0;
+    }
+
+    @media (max-width: 600px) {
+      .products-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <nav>
+      <div class="logo">
+        <!-- REPLACE THIS WITH YOUR ACTUAL LOGO -->
+        <img src="https://via.placeholder.com/48x48/6366f1/ffffff?text=VV" alt="Video Vault Logo">
+        Video Vault
+      </div>
+      <div class="cart-icon" onclick="openCart()">
+        <i class="fas fa-shopping-cart"></i>
+        <span class="cart-count" id="cart-count">0</span>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Premium Video Collection</h1>
+
+    <div class="products-grid" id="products-container">
+      <!-- Products will be inserted here by JavaScript -->
+    </div>
+  </main>
+
+  <!-- Cart Modal -->
+  <div id="cart-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Your Cart</h2>
+        <button class="close-btn" onclick="closeCart()">×</button>
+      </div>
+
+      <div id="cart-items"></div>
+
+      <div class="cart-total">
+        Total: <span id="cart-total">$0.00</span>
+      </div>
+
+      <button class="btn" style="width:100%; margin-top:1.5rem;" onclick="alert('Checkout functionality coming soon!')">Proceed to Checkout</button>
+    </div>
+  </div>
+
+  <script>
+    // Sample video products (replace with your database data)
+    const videos = [
+      {
+        id: 1,
+        title: "Mastering Python in 30 Days",
+        description: "Complete beginner-to-advanced Python course with 120+ lessons and projects.",
+        price: 49.99,
+        thumbnail: "https://images.unsplash.com/photo-1526379095098-d400fd0bf935?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
+      },
+      {
+        id: 2,
+        title: "Advanced JavaScript & React Masterclass",
+        description: "Deep dive into modern JavaScript, hooks, context, Redux, Next.js and more.",
+        price: 79.99,
+        thumbnail: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
+      },
+      {
+        id: 3,
+        title: "Cinematic Video Editing with DaVinci Resolve",
+        description: "Professional color grading, audio mixing and effects – Hollywood style.",
+        price: 69.99,
+        thumbnail: "https://images.unsplash.com/photo-1574717024657-4c5c7d8b3a2e?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
+      },
+      {
+        id: 4,
+        title: "Drone Photography & Videography Masterclass",
+        description: "Learn to shoot stunning aerial footage – from beginner to pro.",
+        price: 59.99,
+        thumbnail: "https://images.unsplash.com/photo-1506947411487-4a9d3d8e2e8d?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
+      },
+    ];
+
+    let cart = [];
+
+    // Render products
+    function renderProducts() {
+      const container = document.getElementById("products-container");
+      container.innerHTML = "";
+
+      videos.forEach(video => {
+        const card = document.createElement("div");
+        card.className = "product-card";
+
+        card.innerHTML = `
+          <img src="${video.thumbnail}" alt="${video.title}" class="product-thumbnail">
+          <div class="product-info">
+            <h3 class="product-title">${video.title}</h3>
+            <p class="product-desc">${video.description}</p>
+            <div class="product-price">$${video.price.toFixed(2)}</div>
+            <button class="btn btn-add" onclick="addToCart(${video.id})">
+              Add to Cart
+            </button>
+          </div>
+        `;
+
+        container.appendChild(card);
+      });
+    }
+
+    // Cart functions
+    function addToCart(videoId) {
+      const video = videos.find(v => v.id === videoId);
+      if (!video) return;
+
+      // Simple: just add one copy (you can improve to handle quantity)
+      cart.push(video);
+      updateCartCount();
+      alert(`${video.title} added to cart!`);
+    }
+
+    function updateCartCount() {
+      document.getElementById("cart-count").textContent = cart.length;
+    }
+
+    function openCart() {
+      renderCart();
+      document.getElementById("cart-modal").style.display = "flex";
+    }
+
+    function closeCart() {
+      document.getElementById("cart-modal").style.display = "none";
+    }
+
+    function renderCart() {
+      const container = document.getElementById("cart-items");
+      container.innerHTML = "";
+
+      if (cart.length === 0) {
+        container.innerHTML = '<p class="empty-cart">Your cart is empty.</p>';
+        document.getElementById("cart-total").textContent = "$0.00";
+        return;
+      }
+
+      cart.forEach(item => {
+        const div = document.createElement("div");
+        div.className = "cart-item";
+        div.innerHTML = `
+          <span>${item.title}</span>
+          <span>$${item.price.toFixed(2)}</span>
+        `;
+        container.appendChild(div);
+      });
+
+      const total = cart.reduce((sum, item) => sum + item.price, 0);
+      document.getElementById("cart-total").textContent = `$${total.toFixed(2)}`;
+    }
+
+    // Initialize
+    renderProducts();
+  </script>
+</body>
+</html>
