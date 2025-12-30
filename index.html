@@ -166,6 +166,13 @@
         <source id="preview-source" src="" type="video/mp4">
         Your browser does not support the video tag.
       </video>
+      <div style="padding: 1rem 1.5rem 1.5rem;">
+        <div id="preview-no-video" style="display:none; color: var(--gray); margin-bottom: 0.75rem;">
+          No preview video available for this course.
+        </div>
+        <div style="font-weight: 700; margin-bottom: 0.5rem;">Sample content</div>
+        <div id="preview-text" style="white-space: pre-wrap; color: #374151;"></div>
+      </div>
     </div>
   </div>
 
@@ -189,109 +196,233 @@
 
   <script>
     const STRIPE_CHECKOUT_ENDPOINT = "https://gzob52iqr5.execute-api.us-east-1.amazonaws.com/prod/stripe";
+    const CONTENT_MARKET_LIST_ENDPOINT = "https://gzob52iqr5.execute-api.us-east-1.amazonaws.com/prod/content-market-list-data";
+    const PURCHASE_STORAGE_KEY = "golingo_content_market_purchase_v1";
+    const DEFAULT_COURSE_PRICE_USD = 1.00;
 
-    // Sample products (replace with your database)
-    const videos = [
-      {
-        id: 1,
-        title: "Mastering French Conversation",
-        description: "Learn natural French speaking from English speakers.",
-        price: 49.99,
-        thumbnail: "https://images.unsplash.com/photo-1526379095098-d400fd0bf935?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-        previewVideo: "https://assets.mixkit.co/videos/preview/mixkit-young-woman-talking-on-the-phone-while-working-39799-large.mp4",
-        language: "English to French"
-      },
-      {
-        id: 2,
-        title: "English for French Speakers",
-        description: "Improve your English with French explanations.",
-        price: 59.99,
-        thumbnail: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-        previewVideo: "https://assets.mixkit.co/videos/preview/mixkit-woman-talking-on-the-phone-in-the-street-39798-large.mp4",
-        language: "French to English"
-      },
-      {
-        id: 3,
-        title: "Spanish Travel Phrases",
-        description: "Essential Spanish for English travelers.",
-        price: 39.99,
-        thumbnail: "https://images.unsplash.com/photo-1574717024657-4c5c7d8b3a2e?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-        previewVideo: "https://assets.mixkit.co/videos/preview/mixkit-woman-talking-on-the-phone-while-working-39799-large.mp4",
-        language: "English to Spanish"
-      },
-      {
-        id: 4,
-        title: "German for Beginners",
-        description: "Start speaking German from English.",
-        price: 69.99,
-        thumbnail: "https://images.unsplash.com/photo-1506947411487-4a9d3d8e2e8d?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-        previewVideo: "https://assets.mixkit.co/videos/preview/mixkit-young-woman-talking-on-the-phone-while-working-39799-large.mp4",
-        language: "English to German"
-      },
-    ];
-
+    let courses = [];
     let cart = [];
 
-    function renderProducts(filteredVideos = videos) {
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#039;"
+      }[ch]));
+    }
+
+    function truncate(str, max = 140) {
+      const s = String(str ?? "");
+      if (s.length <= max) return s;
+      return `${s.slice(0, max - 1)}…`;
+    }
+
+    function makeCourseThumbnailDataUrl(courseName) {
+      const safeName = escapeHtml(courseName || "Course");
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
+          <defs>
+            <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#6366f1"/>
+              <stop offset="100%" stop-color="#22c55e"/>
+            </linearGradient>
+          </defs>
+          <rect width="800" height="500" fill="url(#g)"/>
+          <rect x="40" y="40" width="720" height="420" rx="24" fill="rgba(17,24,39,0.25)"/>
+          <text x="80" y="230" fill="white" font-size="44" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-weight="800">
+            ${safeName}
+          </text>
+          <text x="80" y="285" fill="rgba(255,255,255,0.9)" font-size="22" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+            Golingo content preview
+          </text>
+        </svg>
+      `.trim();
+
+      return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    }
+
+    function normalizeListResponse(data) {
+      if (data?.body) {
+        if (Array.isArray(data.body)) return data.body;
+        if (typeof data.body === "string") {
+          try {
+            const parsed = JSON.parse(data.body);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch {
+            return [];
+          }
+        }
+      }
+      if (Array.isArray(data)) return data;
+      return [];
+    }
+
+    function parseCourseContent(raw) {
+      if (!raw) return null;
+      if (typeof raw === "object") return raw;
+      if (typeof raw !== "string") return null;
+      try { return JSON.parse(raw); } catch { return null; }
+    }
+
+    function toCourse(item, index) {
+      const courseName = item?.course_name ?? item?.courseName ?? `Course ${index + 1}`;
+      const courseId = item?.course_id ?? item?.courseId ?? item?.id ?? String(index + 1);
+      const rawContent = item?.content ?? null;
+      const parsedContent = parseCourseContent(rawContent);
+      const first = parsedContent?.contents?.[0] ?? null;
+      const previewVideoUrl = first?.mVideoUrl ?? "";
+      const previewText = first?.mContent ?? "";
+      const description = previewText ? truncate(previewText, 160) : "Includes lessons, translations, and video content.";
+
+      return {
+        courseId,
+        courseName,
+        price: DEFAULT_COURSE_PRICE_USD,
+        thumbnail: makeCourseThumbnailDataUrl(courseName),
+        languagePair: courseName,
+        description,
+        previewVideoUrl,
+        previewText,
+        rawContent,
+        parsedContent,
+      };
+    }
+
+    function renderProducts(filteredCourses = courses) {
       const container = document.getElementById("products-container");
       container.innerHTML = "";
 
-      filteredVideos.forEach(video => {
+      if (!filteredCourses.length) {
+        container.innerHTML = '<div style="grid-column: 1 / -1; color: var(--gray); text-align: center;">No courses found.</div>';
+        return;
+      }
+
+      filteredCourses.forEach(course => {
         const card = document.createElement("div");
         card.className = "product-card";
         card.innerHTML = `
-          <img src="${video.thumbnail}" alt="${video.title}" class="product-thumbnail">
+          <img src="${course.thumbnail}" alt="${escapeHtml(course.courseName)}" class="product-thumbnail">
           <div class="product-info">
-            <h3 class="product-title">${video.title}</h3>
-            <p class="product-lang">${video.language}</p>
-            <p class="product-desc">${video.description}</p>
-            <div class="product-price">$${video.price.toFixed(2)}</div>
+            <h3 class="product-title">${escapeHtml(course.courseName)}</h3>
+            <p class="product-lang">${escapeHtml(course.languagePair)}</p>
+            <p class="product-desc">${escapeHtml(course.description)}</p>
+            <div class="product-price">$${course.price.toFixed(2)}</div>
             <div style="display:flex; gap:0.5rem;">
-              <button class="btn btn-preview" onclick="openPreview('${video.title}', '${video.previewVideo}')">
-                Preview
-              </button>
-              <button class="btn" onclick="addToCart(${video.id})">
-                Add to Cart
-              </button>
+              <button class="btn btn-preview" data-action="preview">Preview</button>
+              <button class="btn" data-action="add">Add to Cart</button>
             </div>
           </div>
         `;
+        const previewBtn = card.querySelector('[data-action="preview"]');
+        previewBtn?.addEventListener("click", () => openPreview(course.courseName, course.previewVideoUrl, course.previewText));
+        const addBtn = card.querySelector('[data-action="add"]');
+        addBtn?.addEventListener("click", () => addToCart(course.courseId));
         container.appendChild(card);
       });
     }
 
     // Preview Modal
-    function openPreview(title, videoUrl) {
+    let previewStopHandler = null;
+
+    function openPreview(title, videoUrl, previewText) {
+      const video = document.getElementById("preview-video");
       document.getElementById("preview-title").textContent = `${title} – Preview`;
-      document.getElementById("preview-source").src = videoUrl;
-      document.getElementById("preview-video").load();
+      document.getElementById("preview-text").textContent = previewText || "";
+
+      const noVideoEl = document.getElementById("preview-no-video");
+      if (!videoUrl) {
+        noVideoEl.style.display = "block";
+        document.getElementById("preview-source").src = "";
+        video.load();
+      } else {
+        noVideoEl.style.display = "none";
+        document.getElementById("preview-source").src = videoUrl;
+        video.load();
+      }
+
+      if (previewStopHandler) {
+        video.removeEventListener("timeupdate", previewStopHandler);
+        previewStopHandler = null;
+      }
+
       document.getElementById("preview-modal").style.display = "flex";
+
+      // Play only the first 1 second (if possible).
+      if (videoUrl) {
+        const stopAtSeconds = 1;
+        previewStopHandler = () => {
+          if (video.currentTime >= stopAtSeconds) {
+            video.pause();
+            video.currentTime = 0;
+            if (previewStopHandler) {
+              video.removeEventListener("timeupdate", previewStopHandler);
+              previewStopHandler = null;
+            }
+          }
+        };
+        video.currentTime = 0;
+        video.addEventListener("timeupdate", previewStopHandler);
+        video.play().catch(() => {});
+      }
     }
 
     function closePreview() {
       document.getElementById("preview-modal").style.display = "none";
-      document.getElementById("preview-video").pause();
+      const video = document.getElementById("preview-video");
+      if (previewStopHandler) {
+        video.removeEventListener("timeupdate", previewStopHandler);
+        previewStopHandler = null;
+      }
+      video.pause();
     }
 
     // Filter by Language
     function applyFilters() {
       const langFilter = document.getElementById("langFilter").value;
-      let filtered = videos;
+      let filtered = courses;
 
       if (langFilter) {
-        filtered = videos.filter(v => v.language === langFilter);
+        filtered = courses.filter(c => c.languagePair === langFilter);
       }
 
       renderProducts(filtered);
     }
 
+    function populateLanguageFilter() {
+      const select = document.getElementById("langFilter");
+      const existingValue = select.value;
+
+      const uniquePairs = Array.from(new Set(courses.map(c => c.languagePair).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+      select.innerHTML = "";
+
+      const allOpt = document.createElement("option");
+      allOpt.value = "";
+      allOpt.textContent = "All Languages";
+      select.appendChild(allOpt);
+
+      uniquePairs.forEach((pair) => {
+        const opt = document.createElement("option");
+        opt.value = pair;
+        opt.textContent = pair;
+        select.appendChild(opt);
+      });
+
+      if (existingValue && uniquePairs.includes(existingValue)) select.value = existingValue;
+    }
+
     // Cart functions
-    function addToCart(videoId) {
-      const video = videos.find(v => v.id === videoId);
-      if (video) {
-        cart.push(video);
+    function addToCart(courseId) {
+      const course = courses.find(c => String(c.courseId) === String(courseId));
+      if (course) {
+        if (cart.some(c => String(c.courseId) === String(course.courseId))) {
+          alert("This course is already in your cart.");
+          return;
+        }
+        cart.push(course);
         document.getElementById("cart-count").textContent = cart.length;
-        alert(`${video.title} added to cart!`);
+        alert(`${course.courseName} added to cart!`);
       }
     }
 
@@ -299,7 +430,7 @@
       const container = document.getElementById("cart-items");
       container.innerHTML = cart.length === 0 
         ? '<p class="empty-cart">Your cart is empty.</p>'
-        : cart.map(item => `<div class="cart-item"><span>${item.title}</span><span>$${item.price.toFixed(2)}</span></div>`).join('');
+        : cart.map(item => `<div class="cart-item"><span>${escapeHtml(item.courseName)}</span><span>$${item.price.toFixed(2)}</span></div>`).join('');
 
       const total = cart.reduce((sum, item) => sum + item.price, 0);
       document.getElementById("cart-total").textContent = `$${total.toFixed(2)}`;
@@ -317,6 +448,17 @@
         return;
       }
 
+      // Persist the cart so the success page can offer downloads.
+      const purchasePayload = {
+        createdAt: new Date().toISOString(),
+        items: cart.map(c => ({
+          course_id: c.courseId,
+          course_name: c.courseName,
+          content: c.parsedContent ?? c.rawContent
+        }))
+      };
+      try { localStorage.setItem(PURCHASE_STORAGE_KEY, JSON.stringify(purchasePayload)); } catch {}
+
       const checkoutBtn = document.getElementById("checkout-btn");
       checkoutBtn.disabled = true;
       const previousText = checkoutBtn.textContent;
@@ -327,7 +469,7 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            items: cart.map(item => ({ id: item.id, title: item.title, price: item.price })),
+            items: cart.map(item => ({ id: item.courseId, title: item.courseName, price: item.price })),
             return_url_base: window.location.origin
           })
         });
@@ -363,7 +505,31 @@
     }
 
     // Initialize
-    renderProducts();
+    async function loadCoursesFromApi() {
+      const container = document.getElementById("products-container");
+      container.innerHTML = '<div style="grid-column: 1 / -1; color: var(--gray); text-align: center;">Loading courses…</div>';
+
+      try {
+        const res = await fetch(CONTENT_MARKET_LIST_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({})
+        });
+
+        if (!res.ok) throw new Error(`List request failed (${res.status})`);
+        const data = await res.json();
+
+        const list = normalizeListResponse(data);
+        courses = list.map(toCourse).filter(c => c.courseId && c.courseName);
+        populateLanguageFilter();
+        renderProducts(courses);
+      } catch (err) {
+        console.error(err);
+        container.innerHTML = '<div style="grid-column: 1 / -1; color: var(--gray); text-align: center;">Failed to load courses. Check the console for details.</div>';
+      }
+    }
+
+    loadCoursesFromApi();
   </script>
 </body>
 </html>

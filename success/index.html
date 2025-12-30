@@ -13,6 +13,14 @@
     h1 { font-size: 2rem; margin-bottom: 0.75rem; }
     p { color: var(--gray); line-height: 1.6; margin-bottom: 1rem; }
     .meta { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 0.95rem; color: #374151; background: #f3f4f6; border-radius: 10px; padding: 0.75rem 1rem; overflow:auto; }
+    .downloads { margin-top: 1.25rem; }
+    .downloads h2 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+    .downloads p { margin-bottom: 0.75rem; }
+    .dl-item { display:flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0.75rem 0; border-bottom: 1px solid #f3f4f6; }
+    .dl-name { font-weight: 700; }
+    button.btn { padding: 0.75rem 1rem; border-radius: 10px; font-weight: 700; border: none; cursor: pointer; }
+    button.primary { background: var(--primary); color: white; }
+    button.ghost { background: #eef2ff; color: #3730a3; }
     .actions { display:flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1.25rem; }
     a.btn { display:inline-block; padding: 0.75rem 1rem; border-radius: 10px; text-decoration:none; font-weight: 700; }
     a.primary { background: var(--primary); color: white; }
@@ -23,8 +31,9 @@
   <div class="wrap">
     <div class="card">
       <h1>Payment successful</h1>
-      <p>Thanks — your payment went through. You can head back to the catalog.</p>
+      <p>Thanks — your payment went through. Download your purchased content below.</p>
       <div class="meta" id="details">session_id: (not provided)</div>
+      <div class="downloads" id="downloads"></div>
       <div class="actions">
         <a class="btn primary" href="/">Back to Video Vault</a>
         <a class="btn ghost" href="/cancel">Having trouble?</a>
@@ -33,12 +42,115 @@
   </div>
 
   <script>
+    const PURCHASE_STORAGE_KEY = "golingo_content_market_purchase_v1";
+
     const params = new URLSearchParams(window.location.search);
     const sessionId = params.get("session_id");
     if (sessionId) {
       document.getElementById("details").textContent = `session_id: ${sessionId}`;
     }
+
+    function toJsonString(value) {
+      if (value == null) return "null";
+      if (typeof value === "string") {
+        try { return JSON.stringify(JSON.parse(value), null, 2); } catch { return value; }
+      }
+      try { return JSON.stringify(value, null, 2); } catch { return String(value); }
+    }
+
+    function downloadText(filename, text, mime = "application/json") {
+      const blob = new Blob([text], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2500);
+    }
+
+    function renderDownloads() {
+      const container = document.getElementById("downloads");
+
+      if (!sessionId) {
+        container.innerHTML = `<h2>Downloads</h2><p>Missing <span class="meta">session_id</span>. If you just paid, reload this page from the Stripe redirect URL.</p>`;
+        return;
+      }
+
+      let purchase = null;
+      try { purchase = JSON.parse(localStorage.getItem(PURCHASE_STORAGE_KEY) || "null"); } catch {}
+
+      const items = Array.isArray(purchase?.items) ? purchase.items : [];
+      if (!items.length) {
+        container.innerHTML = `<h2>Downloads</h2><p>No purchased items found in this browser. If you paid on a different device/browser, you’ll need to re-download there.</p>`;
+        return;
+      }
+
+      const header = document.createElement("div");
+      header.innerHTML = `<h2>Downloads</h2><p>Files download as <span class="meta">course_id.golingocontent</span>.</p>`;
+      container.appendChild(header);
+
+      const actions = document.createElement("div");
+      actions.style.display = "flex";
+      actions.style.gap = "0.75rem";
+      actions.style.flexWrap = "wrap";
+      actions.style.marginBottom = "0.5rem";
+
+      const dlAll = document.createElement("button");
+      dlAll.className = "btn primary";
+      dlAll.textContent = "Download all";
+      dlAll.addEventListener("click", () => {
+        items.forEach((it) => {
+          const filename = `${it.course_id}.golingocontent`;
+          downloadText(filename, toJsonString(it.content));
+        });
+        try { localStorage.removeItem(PURCHASE_STORAGE_KEY); } catch {}
+      });
+
+      const clearBtn = document.createElement("button");
+      clearBtn.className = "btn ghost";
+      clearBtn.textContent = "Clear downloads";
+      clearBtn.addEventListener("click", () => {
+        try { localStorage.removeItem(PURCHASE_STORAGE_KEY); } catch {}
+        container.innerHTML = `<h2>Downloads</h2><p>Cleared.</p>`;
+      });
+
+      actions.appendChild(dlAll);
+      actions.appendChild(clearBtn);
+      container.appendChild(actions);
+
+      items.forEach((it) => {
+        const row = document.createElement("div");
+        row.className = "dl-item";
+
+        const left = document.createElement("div");
+        const name = document.createElement("div");
+        name.className = "dl-name";
+        name.textContent = it.course_name || it.course_id;
+
+        const file = document.createElement("div");
+        file.className = "meta";
+        file.textContent = `${it.course_id}.golingocontent`;
+
+        left.appendChild(name);
+        left.appendChild(file);
+
+        const btn = document.createElement("button");
+        btn.className = "btn primary";
+        btn.textContent = "Download";
+        btn.addEventListener("click", () => {
+          const filename = `${it.course_id}.golingocontent`;
+          downloadText(filename, toJsonString(it.content));
+        });
+
+        row.appendChild(left);
+        row.appendChild(btn);
+        container.appendChild(row);
+      });
+    }
+
+    renderDownloads();
   </script>
 </body>
 </html>
-
