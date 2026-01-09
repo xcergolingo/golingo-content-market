@@ -199,11 +199,13 @@
   <script>
     const STRIPE_CHECKOUT_ENDPOINT = "https://gzob52iqr5.execute-api.us-east-1.amazonaws.com/prod/stripe";
     const CONTENT_MARKET_LIST_ENDPOINT = "https://gzob52iqr5.execute-api.us-east-1.amazonaws.com/prod/content-market-list-data";
+    const CONTENT_MARKET_SHOW_META_URL_ENDPOINT = "https://gzob52iqr5.execute-api.us-east-1.amazonaws.com/prod/content-market-show-meta-url";
     const PURCHASE_STORAGE_KEY = "golingo_content_market_purchase_v1";
     const DEFAULT_COURSE_PRICE_USD = 1.00;
 
     let courses = [];
     let cart = [];
+    const metaUrlCache = new Map();
 
     function escapeHtml(str) {
       return String(str).replace(/[&<>"']/g, (ch) => ({
@@ -268,6 +270,45 @@
       try { return JSON.parse(raw); } catch { return null; }
     }
 
+    function normalizeMetaUrlResponse(data) {
+      let payload = data ?? {};
+      if (typeof data?.body === "string") {
+        try { payload = JSON.parse(data.body); } catch { payload = {}; }
+      } else if (data?.body && typeof data.body === "object") {
+        payload = data.body;
+      }
+
+      const imageUrl = typeof payload?.image_url === "string" && payload.image_url ? payload.image_url : "";
+      const videoUrl = typeof payload?.video_url === "string" && payload.video_url ? payload.video_url : "";
+      return { imageUrl, videoUrl };
+    }
+
+    async function fetchCourseMetaUrls(courseId) {
+      const key = String(courseId ?? "");
+      if (!key) return { imageUrl: "", videoUrl: "" };
+      if (metaUrlCache.has(key)) return metaUrlCache.get(key);
+
+      const promise = (async () => {
+        try {
+          const res = await fetch(CONTENT_MARKET_SHOW_META_URL_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ course_id: key })
+          });
+
+          if (!res.ok) return { imageUrl: "", videoUrl: "" };
+          const data = await res.json();
+          return normalizeMetaUrlResponse(data);
+        } catch (err) {
+          console.warn("Failed to load meta urls", { courseId: key, err });
+          return { imageUrl: "", videoUrl: "" };
+        }
+      })();
+
+      metaUrlCache.set(key, promise);
+      return promise;
+    }
+
     function toCourse(item, index) {
       const courseName = item?.course_name ?? item?.courseName ?? `Course ${index + 1}`;
       const courseId = item?.course_id ?? item?.courseId ?? item?.id ?? String(index + 1);
@@ -283,6 +324,8 @@
         courseName,
         price: DEFAULT_COURSE_PRICE_USD,
         thumbnail: makeCourseThumbnailDataUrl(courseName),
+        metaImageUrl: "",
+        metaVideoUrl: "",
         languagePair: courseName,
         description,
         previewVideoUrl,
@@ -305,7 +348,7 @@
         const card = document.createElement("div");
         card.className = "product-card";
         card.innerHTML = `
-          <img src="${course.thumbnail}" alt="${escapeHtml(course.courseName)}" class="product-thumbnail">
+          <img src="${course.metaImageUrl || course.thumbnail}" alt="${escapeHtml(course.courseName)}" class="product-thumbnail" loading="lazy">
           <div class="product-info">
             <h3 class="product-title">${escapeHtml(course.courseName)}</h3>
             <p class="product-lang">${escapeHtml(course.languagePair)}</p>
@@ -317,8 +360,22 @@
             </div>
           </div>
         `;
+        const img = card.querySelector("img.product-thumbnail");
+        fetchCourseMetaUrls(course.courseId).then((meta) => {
+          if (meta.imageUrl) course.metaImageUrl = meta.imageUrl;
+          if (meta.videoUrl) course.metaVideoUrl = meta.videoUrl;
+          if (img && card.isConnected && meta.imageUrl) img.src = meta.imageUrl;
+        });
+
         const previewBtn = card.querySelector('[data-action="preview"]');
-        previewBtn?.addEventListener("click", () => openPreview(course.courseName, course.previewVideoUrl, course.previewText));
+        previewBtn?.addEventListener("click", async () => {
+          if (!course.metaVideoUrl) {
+            const meta = await fetchCourseMetaUrls(course.courseId);
+            if (meta.imageUrl) course.metaImageUrl = meta.imageUrl;
+            if (meta.videoUrl) course.metaVideoUrl = meta.videoUrl;
+          }
+          openPreview(course.courseName, course.metaVideoUrl || course.previewVideoUrl, course.previewText);
+        });
         const addBtn = card.querySelector('[data-action="add"]');
         addBtn?.addEventListener("click", () => addToCart(course.courseId));
         container.appendChild(card);
