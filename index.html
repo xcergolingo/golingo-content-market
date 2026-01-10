@@ -201,11 +201,18 @@
     const CONTENT_MARKET_LIST_ENDPOINT = "https://gzob52iqr5.execute-api.us-east-1.amazonaws.com/prod/content-market-list-data";
     const CONTENT_MARKET_SHOW_META_URL_ENDPOINT = "https://gzob52iqr5.execute-api.us-east-1.amazonaws.com/prod/content-market-show-meta-url";
     const PURCHASE_STORAGE_KEY = "golingo_content_market_purchase_v1";
-    const DEFAULT_COURSE_PRICE_USD = 1.00;
+    const DEFAULT_COURSE_PRICE_USD = 0.99;
+    const DEFAULT_CURRENCY = "usd";
 
     let courses = [];
     let cart = [];
     const metaUrlCache = new Map();
+
+    function parsePriceUsd(raw) {
+      const n = typeof raw === "number" ? raw : Number.parseFloat(String(raw ?? ""));
+      if (!Number.isFinite(n) || n <= 0) return null;
+      return n;
+    }
 
     function escapeHtml(str) {
       return String(str).replace(/[&<>"']/g, (ch) => ({
@@ -312,6 +319,12 @@
     function toCourse(item, index) {
       const courseName = item?.course_name ?? item?.courseName ?? `Course ${index + 1}`;
       const courseId = item?.course_id ?? item?.courseId ?? item?.id ?? String(index + 1);
+      const priceUsd =
+        parsePriceUsd(item?.price_usd) ??
+        parsePriceUsd(item?.price) ??
+        parsePriceUsd(item?.course_price_usd) ??
+        parsePriceUsd(item?.course_price) ??
+        DEFAULT_COURSE_PRICE_USD;
       const rawContent = item?.content ?? null;
       const parsedContent = parseCourseContent(rawContent);
       const first = parsedContent?.contents?.[0] ?? null;
@@ -322,7 +335,7 @@
       return {
         courseId,
         courseName,
-        price: DEFAULT_COURSE_PRICE_USD,
+        price: priceUsd,
         thumbnail: makeCourseThumbnailDataUrl(courseName),
         metaImageUrl: "",
         metaVideoUrl: "",
@@ -513,10 +526,17 @@
         items: cart.map(c => ({
           course_id: c.courseId,
           course_name: c.courseName,
+          price_usd: c.price,
           content: c.parsedContent ?? c.rawContent
         }))
       };
       try { localStorage.setItem(PURCHASE_STORAGE_KEY, JSON.stringify(purchasePayload)); } catch {}
+
+      const totalPriceUsd = cart.reduce((sum, item) => sum + item.price, 0);
+      const lineItems = cart.map(item => ({
+        id: item.courseId,
+        title: item.courseName,
+      }));
 
       const checkoutBtn = document.getElementById("checkout-btn");
       checkoutBtn.disabled = true;
@@ -528,7 +548,8 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            items: cart.map(item => ({ id: item.courseId, title: item.courseName, price: item.price })),
+            items: lineItems,
+            price: totalPriceUsd,
             return_url_base: window.location.origin
           })
         });
